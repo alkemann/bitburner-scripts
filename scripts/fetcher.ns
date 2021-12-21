@@ -8,7 +8,7 @@ export async function main(ns) {
 	if(ns.fileExists("tree.txt")) {
 		treeFile = JSON.parse(ns.read('tree.txt'));
 		currentSha = treeFile.sha;
-		// ns.run('/scripts/main.ns');
+		ns.run('/scripts/hub.ns');
 	} else {
 		currentSha = "";
 	}
