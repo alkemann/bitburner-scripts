@@ -1,70 +1,67 @@
 /** @param {NS} ns **/
 const repo = "alkemann/bitburner-scripts"
-
 const treeRoot = `https://api.github.com/repos/${repo}/git/trees/HEAD`
 
 export async function main(ns) {
-  if(ns.fileExists("tree.txt")) {
-    var treeFile = JSON.parse(ns.read('tree.txt'));
-    var currentSha = treeFile.sha;
-    ns.run('/scripts/main.ns');
-  } else {
-    var currentSha = "";
-  }
+	let currentSha;
+	if(ns.fileExists("tree.txt")) {
+		let treeFile = JSON.parse(ns.read('tree.txt'));
+		currentSha = treeFile.sha;
+		// ns.run('/scripts/main.ns');
+	} else {
+		currentSha = "";
+	}
 
-    while(true) {
-    if(await ns.wget(treeRoot,'tree.txt')) {
-      treeFile = JSON.parse(ns.read('tree.txt'));
-      if(treeFile.sha != currentSha) {
-        currentSha = treeFile.sha;
-        ns.tprint(`INFO: Downloading scripts at ${currentSha}`)
-        var urls = await getUrls(ns, treeFile.tree);
+    while (true) {
+		if (await ns.wget(treeRoot,'tree.txt')) {
+			treeFile = JSON.parse(ns.read('tree.txt'));
+			if(treeFile.sha != currentSha) {
+				currentSha = treeFile.sha;
+				ns.print(`INFO: Downloading scripts at ${currentSha}`)
+				const urls = await getUrls(ns, treeFile.tree);
+				const processes = ns.ps();
 
-        var processes = ns.ps();
+				processes.forEach((script) => {
+					if(script.filename != ns.getScriptName()) {
+						ns.scriptKill(script.filename, ns.getHostname());
+					}
+				});
 
-        processes.forEach((script) => {
-          if(script.filename != ns.getScriptName()) {
-            ns.scriptKill(script.filename, ns.getHostname());
-          }
-        });
+				for (let url of urls) {
+					const status = await ns.wget(url[1],`/${url[0]}`);
+					if(status) {
+						ns.print(`SUCCESS: Downloaded ${url[0]}`);
+					} else {
+						ns.print(`ERROR: Failed to download ${url[0]} from ${url[1]}`);
+					}
+				}
 
-        for(let url of urls) {
-          var status = await ns.wget(url[1],`/${url[0]}`);
-          if(status) {
-            ns.tprint(`SUCCESS: Downloaded ${url[0]}`);
-          } else {
-            ns.tprint(`ERROR: Failed to download ${url[0]} from ${url[1]}`);
-          }
-        }
-
-        ns.run('/scripts/updater.ns');
-        return;
-      }
-    }
-    await ns.sleep(10000);
-  }
+				ns.run('/scripts/updater.ns');
+				return;
+			}
+		}
+		await ns.sleep(10000);
+	}
 }
 
 async function getUrls(ns, tree, dir = "") {
-  var urls = []
+	let urls = []
 
-  for(let node of tree) {
-    if(dir.length > 0) var fullPath = `${dir}/${node.path}`
-    else var fullPath = `${node.path}`
+	for(let node of tree) {
+		const fullPath = (dir.length > 0) ? `${dir}/${node.path}` : `${node.path}`
 
+		if (node.type == "tree") {
+			const status = await ns.wget(node.url, 'tmp.txt');
+			if (status) {
+				const newTree = JSON.parse(ns.read('tmp.txt'));
+				urls = urls.concat(await getUrls(ns, newTree["tree"], fullPath));
+			} else {
+				ns.print(`ERROR: Could not fetch ${node.url}`);
+			}
+		} else if (node["type"] == "blob" && fullPath.includes(".ns")) {
+			urls.push([fullPath, `https://raw.githubusercontent.com/${repo}/main/${fullPath}`])
+		}
+	}
 
-    if(node.type == "tree") {
-      var status = await ns.wget(node.url, 'tmp.txt');
-      if(status) {
-        var newTree = JSON.parse(ns.read('tmp.txt'));
-        urls = urls.concat(await getUrls(ns, newTree["tree"], fullPath));
-      } else {
-        ns.tprint(`ERROR: Could not fetch ${node.url}`);
-      }
-    } else if (node["type"] == "blob" && fullPath.includes(".ns")) {
-      urls.push([fullPath, `https://raw.githubusercontent.com/${repo}/main/${fullPath}`])
-    }
-  }
-
-  return urls;
+	return urls;
 }
