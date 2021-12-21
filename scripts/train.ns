@@ -1,0 +1,132 @@
+// CONFIG
+const MAX_LEVEL = 5;
+const BLACKLIST = new Set(["home", "CSEC", "avmnite-02h", "darkweb"]);
+const WEAK_FILE = "weaken.ns";
+const THREADS_PER_SERVER = 100;
+
+// GLOBALS
+let PLAYER_HACKING_EVEL = 1;
+let HACKABLE_PORTS = 0;
+let PORT_BRUTESSH = false;
+let PORT_FTPCRACK = false;
+let PORT_HTTPWORM = false;
+let PORT_SQLINJECT = false;
+let PORT_RELAYSMTP = false;
+let backlog = new Set();
+
+/** @param {NS} ns **/
+export async function main(ns) {
+    // SETUP
+    // ns.enableLog('ALL');
+    // ns.disableLog("enableLog");
+    ns.disableLog("ALL");
+    // ns.enableLog('weaken');
+
+    ns.tail();
+
+    if (ns.fileExists('BruteSSH.exe')) { PORT_BRUTESSH = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('FTPCrack.exe')) { PORT_FTPCRACK = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('HTTPWorm.exe')) { PORT_HTTPWORM = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('SQLInject.exe')) { PORT_SQLINJECT = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('relaySMTP.exe')) { PORT_RELAYSMTP = true; HACKABLE_PORTS++; }
+
+    PLAYER_HACKING_EVEL = ns.getPlayer().hacking;
+
+    // START
+    ns.print("\n\n");
+    const here = ns.getHostname();
+    // Check entire known network
+    let found = new Set();
+    found = listConnected(ns, here, found, 1);
+    found.forEach(function (host) {
+        if (host.substring(0, 3) === 'my-' || BLACKLIST.has(host)) {
+            found.delete(host);
+            return;
+        }
+        // Filter out servers beyond current ability
+        const level = ns.getServerRequiredHackingLevel(host);
+        const ports = ns.getServerNumPortsRequired(host);
+        if (isBeyoundHackable(ns, host, level, ports)) {
+            backlog.add({ host, level, ports })
+            found.delete(host);
+            return;
+        }
+    });
+
+    const ram = ns.getScriptRam(WEAK_FILE);
+    let availableThreads = Math.floor((ns.getServerMaxRam(here) - ns.getServerUsedRam(here)) / ram);
+    let servers = Array.from(found);
+    for (let h in servers) {
+        const target = servers[h];
+        if (ns.isRunning(WEAK_FILE, here, target)) {
+            ns.kill(WEAK_FILE, here, target);
+        }
+    }
+    servers = servers.sort((a, b) =>
+        ns.getServerSecurityLevel(a) - ns.getServerMinSecurityLevel(a)
+            >=
+            ns.getServerSecurityLevel(b) - ns.getServerMinSecurityLevel(b)
+            ? -1 : 1
+    );
+    for (let h in servers) {
+        const target = servers[h];
+
+        if (availableThreads < THREADS_PER_SERVER) break;
+        availableThreads = availableThreads - THREADS_PER_SERVER;
+
+        if (ns.hasRootAccess(target) === false) {
+            takeOver(ns, target);
+        }
+        await ns.run(WEAK_FILE, THREADS_PER_SERVER, target);
+        ns.print("Start weak training against " + target + "!");
+        await ns.sleep(1000);
+    }
+    ns.print("\n\n FINISHED WITH : " + availableThreads + " threads left!");
+    ns.toast("Train startup done!", 'info');
+}
+
+/** @param {NS} ns **/
+function takeOver(ns, host) {
+    if (ns.hasRootAccess(host) === false) {
+        if (PORT_BRUTESSH) ns.brutessh(host);
+        if (PORT_FTPCRACK) ns.ftpcrack(host);
+        if (PORT_HTTPWORM) ns.httpworm(host);
+        if (PORT_SQLINJECT) ns.sqlinject(host);
+        if (PORT_RELAYSMTP) ns.relaysmtp(host);
+        ns.nuke(host);
+    }
+}
+
+/** @param {NS} ns **/
+function isBetter(ns, host, best) {
+    const tWeak = ns.getWeakenTime(host);
+    const minSec = ns.getServerMinSecurityLevel(host);
+    const sec = ns.getServerSecurityLevel(host);
+    const score =
+        Math.round(
+            sec - minSec
+            //  ( (sec+sec-minSec) * 10000 ) / (tWeak*tWeak)
+        )
+        ;
+    const obj = { host, score, time: ns.nFormat(tWeak, '0,0'), sec: ns.nFormat(sec, '0'), minSec };
+    // ns.print(obj);
+    return (obj.score > best.score) ? obj : best;
+}
+
+/** @param {NS} ns **/
+function isBeyoundHackable(ns, host, reqHack, reqPorts) {
+    let notHackable = ns.hasRootAccess(host) ? false : (PLAYER_HACKING_EVEL < reqHack || HACKABLE_PORTS >= reqPorts);
+    return notHackable;
+}
+
+/** @param {NS} ns **/
+function listConnected(ns, hn, found, level) {
+    if (level > MAX_LEVEL) return found;
+    found.add(hn);
+    const connected = ns.scan(hn);
+    for (let h in connected) {
+        if (found.has(connected[h])) continue;
+        found = listConnected(ns, connected[h], found, level + 1);
+    }
+    return found
+}

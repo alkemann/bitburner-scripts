@@ -1,0 +1,67 @@
+import { load } from 'lib.ns';
+
+const PREFIX = 'mine-';
+const KILL_SERVER_SCRIPTS = false;
+const DELETE_SERVERS = true;
+
+// GLOBALS
+/** @var {NS} ns **/
+let ns;
+
+/** @param {NS} ns_ **/
+export async function main(ns_) {
+  load(ns_); ns = ns_;
+
+  const maxCount = ns.getPurchasedServerLimit();
+
+  let servers = ns.getPurchasedServers();
+  if (DELETE_SERVERS) {
+    ns.enableLog('deleteServer');
+    ns.disableLog('killall');
+    for (let s in servers) {
+      const server = servers[s];
+      if (KILL_SERVER_SCRIPTS) {
+        ns.killall(server);
+      }
+      ns.deleteServer(server);
+    }
+    servers = ns.getPurchasedServers();
+  }
+  const count = maxCount - servers.length;
+
+  let ram = ns.args[0] || false;
+  let cost;
+  if (ram === false) {
+    const pick = await pickMostExpensive(count);
+    ram = pick.ram;
+    cost = pick.cost;
+  } else {
+    const costForOne = ns.getPurchasedServerCost(ram);
+    cost = costForOne * maxCount;
+  }
+  if (ram === 0 || cost === NaN || cost === Infinity) {
+    ns.tprint("Cant afford any servers!");
+    return;
+  }
+  ns.tprint("Buying serves with " + ram + " RAM for " + ns.nFormat(cost, '$0,0') + "!");
+
+  ns.enableLog('purchaseServer');
+  for (let i=1; i<=count; i++) {
+    ns.purchaseServer(PREFIX + ram + '-' + i, ram);
+  }
+}
+
+async function pickMostExpensive(count) {
+  const money = ns.getPlayer().money;
+  const maxRam = ns.getPurchasedServerMaxRam();
+  let ram = 8; // never buy cheaper than 8!
+  let pick = {ram, cost: 0};
+  while (true) { await ns.sleep(0); // endless loop warnings
+    const costForOne = ns.getPurchasedServerCost(ram);
+    const cost = costForOne * count;
+    if (cost > money) return pick;
+    pick = {ram, cost};
+    ram *= 2;
+    if (ram > maxRam) break;
+  }
+}

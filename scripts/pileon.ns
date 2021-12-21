@@ -1,0 +1,39 @@
+import {load, findAllConnectedToNthDepth, runOnServer } from 'lib.ns';
+
+// CONFIG
+const WEAK_FILE = 'weaken.ns';
+
+// GLOBALS
+/** @var {NS} ns **/
+let ns;
+
+/** @param {NS} ns_ **/
+export async function main(ns_) {
+  load(ns_); ns = ns_;
+    // ns.disableLog("ALL");
+    // ns.enableLog("ALL");
+
+  const target = ns.args[0] || 'n00dles';
+
+  ns.print("\n\n PILE ON!");
+
+  const network = findAllConnectedToNthDepth(ns.getHostname(), 12);
+  // network.forEach( h => ns.print(h));
+    let hosts = Array.from(network);
+  // const pids = [];
+    for (let h in hosts) {
+    // let pid =
+    await abuse(hosts[h], target);
+    // pids[pid] = hosts[h];
+  }
+
+    // for (let pid in pids) {
+  //  ns.print(pids[pid] + " @ " + pid);
+  // }
+}
+
+async function abuse(host, targetHost) {
+  // ns.killall(host);
+
+  await runOnServer(host, WEAK_FILE, [targetHost]);
+}

@@ -1,0 +1,305 @@
+const MAX_LEVEL = 8;
+const BLACKLIST = new Set(["home", "CSEC", 'darkweb', 'n00dles']);
+const HACK_SERVER = 'mine-131072-1';
+const RUN_AT_HOME = false;
+let HACKLEVEL;
+let HACK_MEM;
+let GROW_MEM;
+let HACKABLE_PORTS = 0;
+let PORT_BRUTESSH = false;
+let PORT_FTPCRACK = false;
+let PORT_HTTPWORM = false;
+let PORT_SQLINJECT = false;
+let PORT_RELAYSMTP = false;
+const GROW_FILE = 'growV2.ns';
+const HACK_FILE = 'v7.ns';
+const KILL_ALL = false;
+const BUY_SERVERS = false;
+const ADD_FROM_BACKLOG = true;
+const SERVER_RAM = 256;
+let MAX_SERVER_COUNT = 25;
+const MONEY_TARGET_PERCENT = 0.75;
+const WATCH_DELAY = 30; // seconds
+
+let backlog;
+
+/** @param {NS} ns **/
+export async function main(ns) {
+
+    ns.tail();
+    // SETUP
+    ns.disableLog("ALL");
+    // ns.enableLog('brutessh');
+    // ns.enableLog('nuke');
+    ns.enableLog('exec');
+
+
+    HACKABLE_PORTS = 0;
+    backlog = new Set();
+
+    if (ns.fileExists('BruteSSH.exe'))  { PORT_BRUTESSH = true;  HACKABLE_PORTS++; }
+    if (ns.fileExists('FTPCrack.exe'))  { PORT_FTPCRACK = true;  HACKABLE_PORTS++; }
+    if (ns.fileExists('HTTPWorm.exe'))  { PORT_HTTPWORM = true;  HACKABLE_PORTS++; }
+    if (ns.fileExists('SQLInject.exe')) { PORT_SQLINJECT = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('relaySMTP.exe')) { PORT_RELAYSMTP = true; HACKABLE_PORTS++; }
+
+    const here = ns.getHostname();
+    const player = ns.getPlayer();
+    HACKLEVEL = player.hacking;
+    HACK_MEM = ns.getScriptRam(HACK_FILE, RUN_AT_HOME ? here : HACK_SERVER);
+    GROW_MEM = ns.getScriptRam(GROW_FILE);
+    MAX_SERVER_COUNT = ns.getPurchasedServerLimit();
+
+    // START
+    ns.print("\n\n\n STARTING at " + here + " " + ns.nFormat((ns.getTimeSinceLastAug() / (60 * 1000)), '0') + " mins\n");
+    ns.print(" Have " + HACKLEVEL + " hacking levels and " + HACKABLE_PORTS + " port hacks.\n");
+
+    // Check entire known network
+    let found = new Set();
+    found = listConnected(ns, here, found, 1);
+    found.forEach(function (host) {
+        if ((RUN_AT_HOME === false && host === HACK_SERVER) || BLACKLIST.has(host)) {
+            found.delete(host);
+            return;
+        }
+        // Filter out servers beyond current ability
+        if (isBeyoundHackable(ns, host)) {
+            const level = ns.getServerRequiredHackingLevel(host);
+            const ports = ns.getServerNumPortsRequired(host);
+            backlog.add({host, level, ports})
+            found.delete(host);
+            return;
+        }
+    });
+
+    backlog.forEach(b => ns.print(b));
+
+    // Identify best target in network
+    let target = {score: 0};
+    // found.forEach(host => target = isBetter(ns, host, target) );
+    target = {host: 'omega-net'};
+    // target = {host: "crush-fitness"}; // hardcode target
+
+    // In case target is new, take control over it
+    ns.print("\n TARGET IDENTIFIED: " + target.host + " \n");
+    takeOver(ns, target.host);
+
+    // Run HACK_FILE script on all found targets
+    const servers = Array.from(found);
+    // let batch = 5;
+    for (let h in servers) {
+        let started = await abuse(ns, servers[h], target);
+        if (started) {
+            // wait to start more
+            await ns.sleep(1000);
+            // batch--;
+            // if (batch < 0) {
+            //     await ns.sleep(60000);
+            //     batch = 5;
+            // }
+        }
+    };
+
+    // ns.getPurchasedSevers()
+
+    if (RUN_AT_HOME) {
+        await runAtHome(ns, target);
+    } else {
+        await startHackServer(ns, target);
+    }
+
+    await watchTarget(ns, target);
+}
+
+/** @param {NS} ns **/
+async function startHackServer(ns, target) {
+     takeOver(ns, HACK_SERVER);
+
+    // if (ns.fileExists(HACK_FILE, HACK_SERVER) === false) {
+    // always update hack script
+    await ns.scp(HACK_FILE, "home", HACK_SERVER);
+    // }
+
+    if (ns.isRunning(HACK_FILE, HACK_SERVER, target.host)) {
+        return;
+    }
+
+    if (KILL_ALL) ns.killall(HACK_SERVER);
+
+    const ram = ns.getServerMaxRam(HACK_SERVER);
+    if (ram > HACK_MEM) {
+        const threads = Math.floor(ram / HACK_MEM);
+        ns.exec(HACK_FILE, HACK_SERVER, threads, target.host);
+    } else {
+        ns.toast("Hack Server has no mem!", 'error');
+        ns.print("Hackserver has no ram");
+    }
+}
+
+/** @param {NS} ns **/
+async function runAtHome(ns, target) {
+    const home_mem = (ns.getServerMaxRam("home") - ns.getServerUsedRam("home")) / 2;
+    if (home_mem > (HACK_MEM*6)) {
+        const threads = Math.floor(home_mem / HACK_MEM);
+        ns.run(HACK_FILE, threads-5, target.host);
+    }
+}
+
+/** @param {NS} ns **/
+async function watchTarget(ns, target, loop = true) {
+    const maxM = ns.getServerMaxMoney(target.host);
+    const targetM = maxM * MONEY_TARGET_PERCENT;
+    const minS = ns.getServerMinSecurityLevel(target.host);
+    let iter = 1;
+  while (loop) {
+    ns.print(" oo : " + iter++);
+    const curM = ns.nFormat(ns.getServerMoneyAvailable(target.host), '0,0');
+        ns.print(" $ Current: " + curM + "   Target: " + ns.nFormat(targetM, '0,0') + " Max: " + ns.nFormat(maxM, '0,0'));
+        const curS = ns.nFormat(ns.getServerSecurityLevel(target.host), '0.0');
+        ns.print(" Sec Current: " + curS + "   Target: " + (5+minS) + " Min: " + minS);
+        if (BUY_SERVERS) {
+            await buyMoreServers(ns, target);
+        }
+        if (ADD_FROM_BACKLOG) { // config adding new servers automatically?
+            await addFromBacklog(ns, target);
+        }
+      await ns.sleep(WATCH_DELAY * 1000);
+  }
+}
+
+/** @param {NS} ns **/
+async function addFromBacklog(ns, target) {
+    const pl = ns.getPlayer().hacking;
+    const servers = Array.from(backlog);
+    for (let h in servers) {
+        const b = servers[h];
+        // ns.print(["checking", b, "player at", pl, "have x ports", HACKABLE_PORTS ]);
+        if (b.level <= pl && b.ports <= HACKABLE_PORTS) {
+            await abuse(ns, b.host, target);
+            backlog.delete(b);
+        }
+    };
+}
+
+/** @param {NS} ns **/
+async function buyMoreServers(ns, target) {
+    const currentServerCount = ns.getPurchasedServers().length;
+    if (currentServerCount < MAX_SERVER_COUNT) {
+        const afford = Math.floor(ns.getPlayer().money/ns.getPurchasedServerCost(SERVER_RAM));
+        if (afford > 0) {
+            // const buying = Math.min(afford, MAX_SERVER_COUNT-currentServerCount);
+            // ns.print(" - Buying " + buying + " new servers");
+            // for (let i = 1; i <= buying; i++) {
+            await buyServer(ns, target);
+            // }
+        }
+    }
+}
+
+/** @param {NS} ns **/
+async function buyServer(ns, target) {
+    const newServer = ns.purchaseServer('my-'+SERVER_RAM+'-auto', SERVER_RAM);
+    if (newServer) {
+        ns.print("\n -= Bought new server : " + newServer + " =-");
+        await abuse(ns, newServer, target);
+        // await ns.scp(HACK_FILE, "home", newServer);
+        // const server_mem = ns.getServerMaxRam(newServer);
+        // const threads = Math.floor(server_mem / HACK_MEM);
+        // ns.exec(HACK_FILE, newServer, threads, target.host);
+    }
+}
+
+/** @param {NS} ns **/
+function takeOver(ns, host) {
+    if (ns.hasRootAccess(host) === false) {
+        if (PORT_BRUTESSH)  ns.brutessh(host);
+        if (PORT_FTPCRACK)  ns.ftpcrack(host);
+        if (PORT_HTTPWORM)  ns.httpworm(host);
+        if (PORT_SQLINJECT) ns.sqlinject(host);
+        if (PORT_RELAYSMTP) ns.relaysmtp(host);
+        ns.nuke(host);
+    }
+}
+
+/** @param {NS} ns **/
+async function abuse(ns, host, target) {
+    takeOver(ns, host);
+
+    if (ns.fileExists(GROW_FILE, host) === false) {
+        await ns.scp(GROW_FILE, "home", host);
+    }
+
+    if (KILL_ALL) ns.killall(host);
+
+    if (ns.isRunning(GROW_FILE, host, target.host)) {
+        return false;
+    }
+
+    const server_mem = ns.getServerMaxRam(host);
+
+    if (server_mem == 0) {
+        return;
+    }
+
+    if (server_mem < GROW_MEM) {
+        ns.print("\n ## Server " + host + " has no RAM");
+        BLACKLIST.add(host);
+        return false;
+    }
+    const available_mem = server_mem - ns.getServerUsedRam(host);
+    if (available_mem < GROW_MEM) {
+        return false;
+    }
+    const threads = Math.floor(server_mem / GROW_MEM);
+    ns.exec(GROW_FILE, host, threads, target.host);
+    return true;
+}
+
+/** @param {NS} ns **/
+function isBeyoundHackable(ns, host) {
+    const reqHack = ns.getServerRequiredHackingLevel(host);
+    const reqPorts = ns.getServerNumPortsRequired(host);
+    let notHackable = ns.hasRootAccess(host) ? false : (HACKLEVEL < reqHack || HACKABLE_PORTS < reqPorts);
+    // if (notHackable)
+    //     ns.print(["Not hackable ", host, HACKLEVEL, reqHack, HACKABLE_PORTS, reqPorts])
+    return notHackable;
+}
+
+/** @param {NS} ns **/
+function listConnected(ns, hn, found, level) {
+    if (level > MAX_LEVEL) return found;
+    found.add(hn);
+    const connected = ns.scan(hn);
+    for (let h in connected) {
+        if (found.has(connected[h])) continue;
+        found = listConnected(ns, connected[h], found, level + 1);
+    }
+    return found
+}
+
+/** @param {NS} ns **/
+function isBetter(ns, host, target) {
+    if (host == 'n00dles') return target;
+    const mMax = ns.getServerMaxMoney(host);
+    if (mMax == 0) return target; // gotta have money
+    const mHackChance = Math.round( ns.hackAnalyzeChance(host) * 100 );
+    // if (mHackChance <= 50) return target; // gotta have more than 60 percent chance to hack
+
+    const tHack = ns.getHackTime(host);
+    const tWeak = ns.getWeakenTime(host);
+    const tGrow = ns.getGrowTime(host);
+    const tTotal = Math.round( ( tGrow + tHack + tWeak ) / 1000 );
+
+    const mGrow = ns.getServerGrowth(host);
+    const score = Math.round( ( mMax * mGrow * mHackChance ) / ( tTotal * 1000000 ) );
+    const obj = {host, score};
+    ns.print({
+        host,
+        mHackChance,
+        mGrow,
+        score: ns.nFormat(score, '0,0'),
+        time: ns.nFormat(tTotal, '0,0'),
+        money: ns.nFormat(mMax, '0,0')
+    });
+    return (obj.score > target.score) ? obj : target;
+}

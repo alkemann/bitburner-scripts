@@ -1,0 +1,43 @@
+/** @param {NS} ns **/
+export async function main(ns) {
+  ns.disableLog("ALL");
+  ns.enableLog('weaken');
+  ns.enableLog('grow');
+  ns.enableLog('hack');
+    const target = ns.args[0]
+  const mnTrsh = ns.getServerMaxMoney(target) * 0.65;
+  const secTrsh = ns.getServerMinSecurityLevel(target) + 5;
+  const steal = ns.hackAnalyze(target);
+  const hack_threads = 0.15/steal;
+
+
+  let i = 0;
+  while(true) {
+
+    i++;
+    const sec = ns.getServerSecurityLevel(target);
+    const current_money = ns.getServerMoneyAvailable(target);
+    ns.print("i "+i+": s["+
+      ns.nFormat(sec, '0')+"/"+secTrsh+"] $("+
+      ns.nFormat(current_money/1000,'0,0k') + " / " +
+      ns.nFormat(mnTrsh/1000,'0,0k') + ")"
+    );
+    if (sec > secTrsh) {
+      await ns.weaken(target);
+      // await ns.sleep(10000);
+      continue;
+    }
+    if (current_money < mnTrsh) {
+      await ns.grow(target);
+      // await ns.sleep(10000);
+      continue;
+    }
+
+    const stole = await ns.hack(target, {threads: hack_threads});
+    if (stole > 0) {
+      ns.toast("Stole: " + ns.nFormat(stole, '0,0'), 'success');
+    } else {
+      ns.toast("Failed to steal!", 'warning');
+    }
+  }
+}

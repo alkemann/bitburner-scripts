@@ -1,0 +1,25 @@
+/** @param {NS} ns **/
+export async function main(ns) {
+  ns.disableLog("ALL");
+  ns.enableLog('weaken');
+  ns.enableLog('grow');
+  ns.enableLog('sleep');
+    const target = ns.args[0]
+  const mnTrsh = ns.getServerMaxMoney(target) * 0.75;
+  const secTrsh = ns.getServerMinSecurityLevel(target) + 5;
+  while(true) {
+    if (ns.getServerSecurityLevel(target) > secTrsh) {
+      await ns.weaken(target);
+      continue;
+    }
+    const money_avail = ns.getServerMoneyAvailable(target);
+    if (money_avail < mnTrsh) {
+      await ns.grow(target);
+      const current_money = ns.getServerMoneyAvailable(target);
+      ns.print("\nmoney: " + ns.nFormat(current_money, '0,0') + "\n");
+      continue;
+    }
+
+    await ns.weaken(target);
+  }
+}

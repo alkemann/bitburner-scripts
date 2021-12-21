@@ -1,0 +1,110 @@
+
+
+// GLOBALS
+/** @var {NS} ns **/
+let ns = {};
+let LIB_FILE_LOADED = false;
+let HACKABLE_PORTS = 0;
+let PORT_BRUTESSH = false;
+let PORT_FTPCRACK = false;
+let PORT_HTTPWORM = false;
+let PORT_SQLINJECT = false;
+let PORT_RELAYSMTP = false;
+
+
+export async function runOnServer(host, script, script_args = [], takeScriptFrom = 'home') {
+    if (ns.hasRootAccess(host) === false && takeOver(host) === false) {
+        ns.toast("Unable to takeover " + host, 'error');
+        return;
+    }
+    if (ns.fileExists(script, host) === false) {
+        await ns.scp(script, takeScriptFrom, host);
+    }
+    const serverMaxRam = ns.getServerMaxRam(host);
+    if (serverMaxRam == 0) return;
+  const ram = ns.getScriptRam(script, host);
+    const threads = Math.floor((serverMaxRam - ns.getServerUsedRam(host)) / ram);
+    if (threads < 1) return;
+  return ns.exec(script, host, threads, ...script_args);
+}
+
+/**
+ * Open all ports you can and nuke server
+ *
+ * @param string host
+ */
+export async function takeOver(host) {
+  if (!LIB_FILE_LOADED) load(wrapper);
+    if (ns.hasRootAccess(host)) {
+        return true;
+    } else {
+        if (PORT_BRUTESSH)  ns.brutessh(host);
+        if (PORT_FTPCRACK)  ns.ftpcrack(host);
+        if (PORT_HTTPWORM)  ns.httpworm(host);
+        if (PORT_SQLINJECT) ns.sqlinject(host);
+        if (PORT_RELAYSMTP) ns.relaysmtp(host);
+        ns.nuke(host);
+        return ns.hasRootAccess(host);
+    }
+}
+
+/**
+ * @param string host
+ * @param number depth
+ */
+export function findAllConnectedToNthDepth(host, depth = 5) {
+    return findChildren(host, new Set(), depth)
+}
+
+/**
+ *
+ * @param string host starting host
+ * @param {Set} net set of all host names
+ * @param number depth max depth
+ * @param number level current level
+ */
+function findChildren(parent, net, depth, level = 0) {
+    if (level > depth) return net;
+    net.add(parent);
+    const children = ns.scan(parent);
+    for (let h in children) {
+        if (net.has(children[h])) continue;
+        net = findChildren(children[h], net, depth, level + 1);
+    }
+    return net
+}
+
+
+/**
+ * Run once for loading this library file
+ *
+ * @param {NS} wrapper
+ */
+export function load(wrapper) {
+    LIB_FILE_LOADED = true;
+    ns = wrapper;
+    ns.disableLog('disableLog');
+    ns.disableLog('enableLog');
+    ns.disableLog('scan');
+    ns.disableLog('getServerMaxRam');
+    ns.disableLog('getServerUsedRam');
+    ns.disableLog('getScriptRam');
+    ns.disableLog('scp');
+    ns.disableLog('brutessh');
+    ns.disableLog('ftpcrack');
+    ns.disableLog('httpworm');
+    ns.disableLog('sqlinject');
+    ns.disableLog('relaysmtp');
+
+
+    // ns.disableLog('exec');
+
+    ns.toast("LIB LOADED!", 'info');
+
+    if (ns.fileExists('BruteSSH.exe')) { PORT_BRUTESSH = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('FTPCrack.exe')) { PORT_FTPCRACK = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('HTTPWorm.exe')) { PORT_HTTPWORM = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('SQLInject.exe')) { PORT_SQLINJECT = true; HACKABLE_PORTS++; }
+    if (ns.fileExists('relaySMTP.exe')) { PORT_RELAYSMTP = true; HACKABLE_PORTS++; }
+
+}

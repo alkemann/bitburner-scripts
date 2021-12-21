@@ -1,0 +1,119 @@
+const MAX_LEVEL = 5;
+
+
+
+class Node {
+
+
+    /** @param {NS} ns **/
+    constructor(ns, hostname, parent, level) {
+        this.ns = ns;
+        this.level = level;
+        this.parent = parent;
+        this.hostname = hostname;
+
+        this.max_mem = ns.getServerMaxRam(hostname)
+        this.avail_mem = this.max_mem - ns.getServerUsedRam(hostname);
+        this.chance = Math.round( ns.hackAnalyzeChance(hostname) * 100 );
+        this.max_mon = ns.getServerMaxMoney(hostname);
+        this.avail_mon = ns.getServerMoneyAvailable(hostname);
+        this.root = ns.hasRootAccess(hostname);
+        this.ports = ns.getServerNumPortsRequired(hostname);
+        this.reqLevel = ns.getServerRequiredHackingLevel(hostname);
+        this.min_sec = ns.getServerMinSecurityLevel(hostname);
+        this.sec = ns.getServerSecurityLevel(hostname);
+        this.minSec = ns.getServerMinSecurityLevel(hostname);
+        this.growth = ns.getServerGrowth(hostname);
+        this.tHack = ns.getHackTime(hostname);
+        this.tWeak = ns.getWeakenTime(hostname);
+        this.tGrow = ns.getGrowTime(hostname);
+        this.work = Math.round( ( this.tGrow + this.tHack + this.tWeak ) / 1000 );
+        this.addConnected();
+    }
+
+    /** @param string[] neighbours */
+    addConnected() {
+        const neighbours = this.ns.scan(this.hostname);
+        this.children = [];
+        if (this.level >= MAX_LEVEL) return;
+        for (let h in neighbours) {
+            const host = neighbours[h];
+            if (host.substring(0, 3) === 'my-') continue;
+            if (host == this.parent) continue;
+            this.children[host] = new Node(this.ns, host, this.hostname, this.level + 1);
+        }
+    }
+
+    score() {
+
+        const score = Math.round(
+            ( this.max_mon * this.growth * this.chance )
+            /
+            ( this.work * 1000000 )
+        );
+        return score;
+    }
+
+    toString() {
+        return this.hostname + "["+ this.sec + "/"+ this.minSec +"]"
+            // + "[ " + this.score() + " ] "
+            // + " ($ " + this.ns.nFormat((this.max_mon/1000000), '0,0')
+            // + "m @ " + this.ns.nFormat(this.chance, '0') + "%) "
+            // + "%) [M " + this.ns.nFormat(this.avail_mem, '0,0')
+            + "{" + (this.root ? ('R ') : ('- ' + this.reqLevel + ' @ '+ this.ports )) + "}"
+        ;
+    }
+
+    toCsv() {
+        return this.hostname + "," +
+            this.max_mem + "," +
+            this.avail_mem + "," +
+            this.chance + "," +
+            this.max_mon + "," +
+            this.avail_mon + "," +
+            this.root + "," +
+            this.ports + "," +
+            this.reqLevel + "," +
+            this.growth + "," +
+            this.min_sec + ',' +
+            this.sec + ',' +
+            this.minSec + ',' +
+            this.tHack + ',' +
+            this.tWeak + ',' +
+            this.tGrow + ',' +
+            this.work + ',' +
+        '';
+    }
+
+}
+
+/** @param {NS} ns **/
+export async function main(ns) {
+    ns.tail();
+    ns.disableLog('ALL');
+
+    ns.print("\n\n -- \n")
+    const root = new Node(ns, ns.getHostname(), 0);
+    ns.print('hostname,max_mem,avail_mem,chance,max_mon,avail_mon,root,ports,reqLevel,growth,min_sec,sec,minSec,tHack,tWeak,tGrow,work');
+    printTree(ns, root, 1);
+
+    await ns.sleep(60000);
+}
+
+/** @param {NS} ns **/
+function printTree(ns, node, ind) {
+    for (let child in node.children) {
+        const n = node.children[child];
+        // ns.print(" " + leftPad(ind) + " " + n.toString());
+        ns.print(n.toCsv());
+        printTree(ns, n, ind + 1);
+    }
+}
+
+function leftPad(n, c='-') {
+    let out = '';
+    for (let i=0; i<n; i++) {
+        out = out + c;
+    }
+    return out;
+}
