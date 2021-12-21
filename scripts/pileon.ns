@@ -1,7 +1,7 @@
 import {load, findAllConnectedToNthDepth, runOnServer } from 'lib.ns';
 
 // CONFIG
-const WEAK_FILE = 'weaken.ns';
+const WEAK_FILE = '/scripts/weaken.ns';
 
 // GLOBALS
 /** @var {NS} ns **/

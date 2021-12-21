@@ -1,7 +1,7 @@
 // CONFIG
 const MAX_LEVEL = 5;
 const BLACKLIST = new Set(["home", "CSEC", "avmnite-02h", "darkweb"]);
-const WEAK_FILE = "weaken.ns";
+const WEAK_FILE = "/scripts/weaken.ns";
 const THREADS_PER_SERVER = 100;
 
 // GLOBALS
