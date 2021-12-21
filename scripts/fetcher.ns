@@ -4,8 +4,9 @@ const treeRoot = `https://api.github.com/repos/${repo}/git/trees/HEAD`
 
 export async function main(ns) {
 	let currentSha;
+	let treeFile;
 	if(ns.fileExists("tree.txt")) {
-		let treeFile = JSON.parse(ns.read('tree.txt'));
+		treeFile = JSON.parse(ns.read('tree.txt'));
 		currentSha = treeFile.sha;
 		// ns.run('/scripts/main.ns');
 	} else {
