@@ -60,7 +60,7 @@ async function getUrls(ns, tree, dir = "") {
 				ns.print(`ERROR: Could not fetch ${node.url}`);
 			}
 		} else if (node["type"] == "blob" && fullPath.includes(".ns")) {
-			urls.push([fullPath, `https://raw.githubusercontent.com/${repo}/main/${fullPath}`])
+			urls.push([fullPath, `https://raw.githubusercontent.com/${repo}/master/${fullPath}`])
 		}
 	}
 
