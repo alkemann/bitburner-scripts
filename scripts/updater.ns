@@ -1,6 +1,6 @@
 /** @param {NS} ns **/
 
-const fetcherURL = "https://raw.githubusercontent.com/alkemann/bitburner-scripts/main/scripts/fetcher.ns"
+const fetcherURL = "https://raw.githubusercontent.com/alkemann/bitburner-scripts/master/scripts/fetcher.ns"
 const fetcherName = "/scripts/fetcher.ns"
 
 export async function main(ns) {
