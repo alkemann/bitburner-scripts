@@ -1,6 +1,5 @@
 /** @param {NS} ns **/
-const repo = "alkemann/bitburner-scripts"
-const treeRoot = `https://api.github.com/repos/${repo}/git/trees/HEAD`
+const treeRoot = `https://api.github.com/repos/alkemann/bitburner-scripts/git/trees/HEAD`
 
 export async function main(ns) {
 	let currentSha;

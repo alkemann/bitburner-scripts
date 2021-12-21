@@ -11,8 +11,8 @@ let PORT_FTPCRACK = false;
 let PORT_HTTPWORM = false;
 let PORT_SQLINJECT = false;
 let PORT_RELAYSMTP = false;
-const GROW_FILE = '/scripts/growV2.ns';
-const HACK_FILE = '/scripts/v7.ns';
+const GROW_FILE = 'growV2.ns';
+const HACK_FILE = 'v7.ns';
 const KILL_ALL = false;
 const BUY_SERVERS = false;
 const ADD_FROM_BACKLOG = true;
@@ -117,7 +117,7 @@ async function startHackServer(ns, target) {
 
     // if (ns.fileExists(HACK_FILE, HACK_SERVER) === false) {
     // always update hack script
-    await ns.scp(HACK_FILE, "home", HACK_SERVER);
+    await ns.scp('/scripts/'+HACK_FILE, "home", HACK_SERVER);
     // }
 
     if (ns.isRunning(HACK_FILE, HACK_SERVER, target.host)) {
@@ -141,7 +141,7 @@ async function runAtHome(ns, target) {
     const home_mem = (ns.getServerMaxRam("home") - ns.getServerUsedRam("home")) / 2;
     if (home_mem > (HACK_MEM*6)) {
         const threads = Math.floor(home_mem / HACK_MEM);
-        ns.run(HACK_FILE, threads-5, target.host);
+        ns.run('/scripts/'+HACK_FILE, threads-5, target.host);
     }
 }
 
@@ -202,7 +202,7 @@ async function buyServer(ns, target) {
     if (newServer) {
         ns.print("\n -= Bought new server : " + newServer + " =-");
         await abuse(ns, newServer, target);
-        // await ns.scp(HACK_FILE, "home", newServer);
+        // await ns.scp('/scripts/'+HACK_FILE, "home", newServer);
         // const server_mem = ns.getServerMaxRam(newServer);
         // const threads = Math.floor(server_mem / HACK_MEM);
         // ns.exec(HACK_FILE, newServer, threads, target.host);
@@ -226,7 +226,7 @@ async function abuse(ns, host, target) {
     takeOver(ns, host);
 
     if (ns.fileExists(GROW_FILE, host) === false) {
-        await ns.scp(GROW_FILE, "home", host);
+        await ns.scp('/scripts/'+GROW_FILE, "home", host);
     }
 
     if (KILL_ALL) ns.killall(host);
